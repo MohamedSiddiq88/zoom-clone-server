@@ -5,11 +5,7 @@ const socketIO = require('socket.io');
 
 const app = express();
 app.use(cors());
-const port = 8443;
 
-app.get("/",(req,res)=>{
-  res.send(`Port${port}`)
-})
 const server = http.createServer(app);
 
 const io = socketIO(server, {
@@ -61,6 +57,7 @@ io.on('connection', (socket) => {
   });
 });
 
+const port = 3001;
 server.listen(port, () => {
   console.log(`Server is running on port ${port}`);
 });
