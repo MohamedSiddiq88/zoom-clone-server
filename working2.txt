@@ -1,0 +1,176 @@
+//server.js
+const express = require('express');
+const app = express();
+const http = require('http');
+const { Server } = require('socket.io');
+const cors = require("cors");
+
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "http://localhost:3000",
+    methods: ["GET", "POST"]
+  },
+});
+
+io.on("connection", (socket) => {
+  console.log(`User Connected: ${socket.id}`);
+
+  socket.on("join_room", (data) => {
+    socket.join(data);
+    const room = io.sockets.adapter.rooms.get(data);
+    const userCount = room ? room.size : 0;
+    io.to(data).emit("user_count", { count: userCount });
+  });
+
+  socket.on("send_message", (data) => {
+    socket.to(data.room).emit("receive_message", data);
+  });
+
+  socket.on("start_call", (data) => {
+    socket.to(data.room).emit("receive_video", { stream: data.stream });
+  });
+
+  socket.on("disconnect", () => {
+    const rooms = io.sockets.adapter.rooms;
+    rooms.forEach((_, room) => {
+      const userCount = rooms.get(room).size;
+      io.to(room).emit("user_count", { count: userCount });
+    });
+  });
+});
+
+server.listen(3001, () => {
+  console.log('Server running on port 3001');
+});
+
+
+//room.js
+// Import necessary dependencies
+import { io } from 'socket.io-client';
+import { useEffect, useState, useRef } from 'react';
+
+const socket = io.connect("http://localhost:3001"); // server
+
+function Room() {
+  const [room, setRoom] = useState("");
+  const [message, setMessage] = useState("");
+  const [messageReceived, setMessageReceived] = useState("");
+  const [connectedUsers, setConnectedUsers] = useState(0);
+  const localVideoRef = useRef();
+  const remoteVideoRef = useRef();
+  const localStreamRef = useRef();
+
+  const joinRoom = () => {
+    if (room !== "") {
+      socket.emit("join_room", room);
+    }
+  };
+
+  const sendMessage = () => {
+    socket.emit("send_message", { message: message, room: room });
+  };
+
+  useEffect(() => {
+    socket.on("receive_message", (data) => {
+      setMessageReceived(data.message);
+    });
+
+    socket.on("user_count", (data) => {
+      setConnectedUsers(data.count);
+    });
+
+    // Setup local video stream
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then((stream) => {
+        localVideoRef.current.srcObject = stream;
+        localStreamRef.current = stream;
+      })
+      .catch((error) => {
+        console.error("Error accessing media devices: ", error);
+      });
+
+    // Receive remote video stream
+    socket.on("receive_video", (data) => {
+      const remoteStream = new MediaStream();
+      const remoteVideo = document.createElement("video");
+
+      data.stream.getTracks().forEach((track) => {
+        remoteStream.addTrack(track);
+      });
+
+      remoteVideo.srcObject = remoteStream;
+      remoteVideo.autoplay = true;
+      remoteVideo.playsInline = true;
+      remoteVideoRef.current.appendChild(remoteVideo);
+    });
+
+    return () => {
+      // Cleanup
+      socket.off("receive_message");
+      socket.off("user_count");
+      socket.off("receive_video");
+
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+    };
+  }, []);
+
+  const startCall = () => {
+    const localStream = localVideoRef.current.srcObject;
+  
+    // Make sure the localStream exists and is a MediaStream object
+    if (localStream && localStream instanceof MediaStream) {
+      const tracks = localStream.getTracks();
+      const trackIds = tracks.map((track) => track.id);
+      socket.emit("start_call", { tracks: trackIds, room: room });
+    } else {
+      console.error("Local stream not available or invalid.");
+    }
+  };
+  
+
+  return (
+    <div>
+      <input
+        placeholder="Room number"
+        onChange={(e) => {
+          setRoom(e.target.value);
+        }}
+      ></input>
+      <button onClick={joinRoom}>Join Room</button>
+      <div>
+        Connected Users: {connectedUsers}
+      </div>
+      <div>
+        <h4>Local Video</h4>
+        <video ref={localVideoRef} autoPlay playsInline muted></video>
+      </div>
+      <div>
+        <h4>Remote Video</h4>
+        <div ref={remoteVideoRef}></div>
+      </div>
+      <div>
+        <button onClick={startCall}>Start Call</button>
+      </div>
+      <div>
+        <input
+          placeholder="Message..."
+          onChange={(e) => {
+            setMessage(e.target.value);
+          }}
+        ></input>
+        <button onClick={sendMessage}>Send Message</button>
+        <h4>Message:</h4>
+        {messageReceived}
+      </div>
+    </div>
+  );
+}
+
+export default Room;

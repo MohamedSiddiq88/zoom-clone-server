@@ -1,0 +1,85 @@
+import { io } from 'socket.io-client';
+import { useEffect,useState } from 'react';
+
+
+const socket = io.connect("http://localhost:3001")//server
+
+
+function Room() {
+  const [room, setRoom] = useState("");
+
+  const [message, setMessage] = useState("");
+  const [messageRecived, setMessageRecived] = useState("");
+
+  const joinRoom = ()=>{
+    if (room !==""){
+      socket.emit("join_room", room);
+    }
+  }
+
+  const sendMessage = () => {
+    socket.emit("send_message", {message:message, room:room})
+  };
+
+  useEffect(()=> {
+    socket.on("recive_message", (data) => {
+      setMessageRecived(data.message)
+    })
+  }, [socket])
+
+  return (
+    <div>
+      <input placeholder='Room number'
+      onChange={(e) => {
+        setRoom(e.target.value)
+      }}
+      ></input>
+      <button onClick={joinRoom}>Join Room</button>
+      <input placeholder='message...'
+      onChange={(e)=>{setMessage(e.target.value)}}
+      ></input>
+      <button onClick={sendMessage}>Send Message</button>
+      <h4>Message:</h4>
+      {messageRecived}
+    </div>
+  )
+}
+
+export default Room
+
+//server.js
+// server.js
+const express = require('express');
+const app = express();
+const http = require('http');
+const {Server} = require('socket.io');
+const cors =require("cors")
+app.use(cors());
+
+const server = http.createServer(app);
+const io = new Server(server,{
+  cors:{
+    origin:"http://localhost:3000",
+    methods:["GET","POST"]
+  },
+}); 
+
+io.on("connection", (socket) => {
+  console.log(`User Connected: ${socket.id}`)
+
+  socket.on("join_room", (data)=>{
+    socket.join(data);
+  }) 
+
+  socket.on("send_message", (data)=>{
+    // socket.broadcast.emit("recive_message", data)
+    socket.to(data.room).emit("recive_message",data)
+  })
+});
+
+
+
+
+server.listen(3001, () => {
+  console.log('Server running on port 3001');
+});
