@@ -20,14 +20,15 @@ const connectedUsers = new Map();
 io.on('connection', (socket) => {
   console.log('User connected');
 
-  socket.on('join-conference', (roomId, userId) => {
-    console.log(`User joined conference: Room ${roomId}, User ${userId}`);
+  socket.on('join-conference', (roomId, userName, userId) => { // Include the userName parameter here
+    console.log(`User joined conference: Room ${roomId}, User ${userName} (ID: ${userId})`);
     socket.join(roomId);
-    connectedUsers.set(socket.id, { userId, screenSharing: false });
-    io.to(roomId).emit('new-user', userId);
+    connectedUsers.set(socket.id, { userId, userName, screenSharing: false }); // Save the userName along with the userId
+    io.to(roomId).emit('new-user', userName); // Emit the userName instead of the userId to other users in the room
 
     const connectedUserIds = Array.from(connectedUsers.entries()).map(([socketId, user]) => ({
       userId: user.userId,
+      userName: user.userName, // Include the userName here
       screenSharing: socketId !== socket.id ? connectedUsers.get(socketId).screenSharing : false,
     }));
     socket.emit('user-list', connectedUserIds);
@@ -59,5 +60,5 @@ io.on('connection', (socket) => {
 
 const port = 3001;
 server.listen(port, () => {
-  console.log(`Server is running on port ${port}`);
+  console.log(`Serverrrrr is running on port ${port}`);
 });
